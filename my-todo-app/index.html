@@ -1,0 +1,509 @@
+<!-- index.html
+     WHY THIS FILE EXISTS:
+     This is the "frontend" - the actual page the user's browser downloads and
+     shows on screen. It defines the STRUCTURE and content of the page (the
+     login form, the todo list, buttons, etc). It links to app.js, which adds
+     BEHAVIOR (what happens when you click things), and to server.js's routes,
+     which supply the actual DATA. -->
+
+<!-- <!DOCTYPE html> tells the browser "this is a modern HTML5 document", so it
+     renders the page using up-to-date web standards instead of old quirky rules. -->
+<!DOCTYPE html>
+<!-- The <html> tag wraps the entire page. lang="en" tells browsers/screen
+     readers the page's main language is English, which helps accessibility
+     tools and translation features work correctly. -->
+<html lang="en">
+<head>
+  <!-- <meta charset="UTF-8"> tells the browser which set of characters/symbols
+       to use when displaying text, so special characters don't look broken. -->
+  <meta charset="UTF-8" />
+  <!-- This viewport tag makes the page render correctly and scale properly on
+       mobile phone screens, instead of showing a tiny "desktop" version. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- <title> sets the text shown in the browser's tab at the top of the window. -->
+  <title>My To-Do List</title>
+  <!-- A <style> block lets us write CSS (styling rules) directly in this file.
+       For a beginner project, keeping styles inline here (instead of a
+       separate .css file) keeps everything in one place and simple to follow. -->
+  <style>
+    /* Applies to every element on the page (the "*" is a wildcard selector). */
+    * {
+      /* box-sizing makes width/height calculations include padding and
+         borders, which behaves more predictably than the browser default. */
+      box-sizing: border-box;
+    }
+
+    /* Styles for the whole visible page body. */
+    body {
+      /* A simple, widely-available font stack for clean, readable text. */
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      /* max-width keeps the content from stretching too wide on big screens. */
+      max-width: 480px;
+      /* margin: 40px auto centers the body horizontally and adds top/bottom space. */
+      margin: 40px auto;
+      /* Adds some inner spacing so content doesn't touch the screen edges. */
+      padding: 0 16px;
+      /* A soft gradient background for a more polished look. */
+      background: linear-gradient(135deg, #6a8dff 0%, #a06afc 100%);
+      min-height: calc(100vh - 80px);
+    }
+
+    /* Styles the big heading at the top of the page. */
+    h1 {
+      text-align: center;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Styles both our login/signup "card" and our todo-list "card". */
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 28px 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      margin-bottom: 16px;
+    }
+
+    #auth-title {
+      text-align: center;
+      color: #333;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+
+    /* Groups a label + input so we can position the show/hide-password
+       toggle button relative to the password input. */
+    .form-field {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .form-field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 6px;
+    }
+
+    /* Styles every text input box on the page. */
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #dcdfe6;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    /* Leaves room on the right of the password box for the "show/hide" toggle. */
+    #password {
+      padding-right: 44px;
+    }
+
+    /* A nicer, more visible focus state than the browser default outline. */
+    input[type="text"]:focus,
+    input[type="password"]:focus {
+      outline: none;
+      border-color: #6a8dff;
+      box-shadow: 0 0 0 3px rgba(106, 141, 255, 0.2);
+    }
+
+    /* The eye icon button that toggles password visibility. */
+    #toggle-password {
+      position: absolute;
+      right: 6px;
+      top: 30px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #toggle-password:hover {
+      color: #4a90e2;
+      background: none;
+    }
+
+    /* Styles every button on the page. */
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      transition: background-color 0.15s ease, transform 0.05s ease;
+    }
+
+    /* Changes the button's color slightly when the mouse hovers over it, as
+       visual feedback that it's clickable. */
+    button:hover {
+      background-color: #357abd;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    /* Styles the small text link used to switch between "Login" and "Sign Up". */
+    .switch-link {
+      text-align: center;
+      display: block;
+      margin-top: 14px;
+      color: #4a90e2;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      width: auto;
+      padding: 0;
+      font-size: 13px;
+      font-weight: normal;
+    }
+
+    .switch-link:hover {
+      background: none;
+      color: #357abd;
+    }
+
+    /* Styles error messages so they stand out in red. */
+    .error-message {
+      color: #d9534f;
+      text-align: center;
+      margin-top: 10px;
+      font-size: 13px;
+      /* min-height reserves space so the page doesn't jump around when an
+         error message appears or disappears. */
+      min-height: 18px;
+    }
+
+    /* Removes the default bullet points and spacing from our todo <ul> list. */
+    #todo-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    /* Styles each individual todo item row. */
+    .todo-item {
+      display: flex; /* Lays out children (checkbox, text, delete button) in a row. */
+      align-items: center; /* Vertically centers them relative to each other. */
+      justify-content: space-between; /* Pushes items to opposite ends of the row. */
+      padding: 8px 0;
+      border-bottom: 1px solid #eee; /* A thin line separating each todo item. */
+    }
+
+    /* Styles the text of a todo item that has been marked completed, giving
+       it a strikethrough line and a faded/grey color. */
+    .todo-item.completed .todo-text {
+      text-decoration: line-through;
+      color: #999;
+    }
+
+    /* Makes the todo's text take up the remaining horizontal space in its row. */
+    .todo-text {
+      flex: 1;
+      margin: 0 10px;
+    }
+
+    /* Styles the small "delete" (X) button next to each todo. */
+    .delete-btn {
+      width: auto;
+      background-color: #d9534f;
+      padding: 4px 10px;
+    }
+
+    .delete-btn:hover {
+      background-color: #c9302c;
+    }
+
+    /* This utility class is used (via JavaScript in app.js) to hide elements
+       we don't currently need to show, like hiding the todo app until the
+       user logs in, or hiding the login form once they're logged in. */
+    .hidden {
+      display: none;
+    }
+
+    /* Styles the header row inside the todo app showing the username + logout button. */
+    .todo-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .todo-header button {
+      width: auto;
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+
+    /* Styles the row containing the "add new todo" input and its button so
+       they sit side-by-side instead of stacked. */
+    .add-todo-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .add-todo-row input {
+      margin: 0;
+      flex: 1;
+    }
+
+    .add-todo-row button {
+      width: auto;
+      padding: 10px 16px;
+    }
+
+    /* Styles the weather greeting banner shown above the todo list. It uses
+       its own soft gradient + rounded corners so it reads as a friendly
+       "card" of its own, distinct from the plain white todo card below it. */
+    #weather-greeting {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(135deg, #ffe08a 0%, #ff9a8b 100%);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      color: #4a3418;
+      font-size: 14px;
+    }
+
+    /* The little weather icon image fetched from OpenWeather's icon CDN. */
+    #weather-icon {
+      width: 42px;
+      height: 42px;
+      flex-shrink: 0;
+    }
+
+    #weather-text strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+
+    /* Hides the whole banner while weather data hasn't loaded yet (or failed
+       to load), so we never show an empty/broken-looking box. */
+    #weather-greeting.hidden {
+      display: none;
+    }
+
+    /* Styles the "check weather for a city" search row. */
+    .weather-search-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .weather-search-row input {
+      margin: 0;
+      flex: 1;
+    }
+
+    .weather-search-row button {
+      width: auto;
+      padding: 10px 16px;
+    }
+
+    /* The detailed weather result card shown after a city search. */
+    #weather-result {
+      background: #eef4ff;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      color: #26364d;
+      font-size: 14px;
+    }
+
+    #weather-result.hidden {
+      display: none;
+    }
+
+    #weather-result-city {
+      display: block;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    #weather-result-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+    }
+
+    .weather-search-error {
+      color: #d9534f;
+      font-size: 13px;
+      margin-bottom: 10px;
+      min-height: 16px;
+    }
+  </style>
+</head>
+<body>
+  <!-- The main page heading, always visible. -->
+  <h1>My To-Do List</h1>
+
+  <!-- ============ AUTH SECTION ============ -->
+  <!-- This whole <div> holds the login/signup form. app.js will add the
+       "hidden" class to this once the user successfully logs in, so it
+       disappears and the todo app appears instead. -->
+  <div id="auth-section" class="card">
+    <!-- This heading's text changes between "Login" and "Sign Up" via
+         JavaScript, depending on which mode the user has selected. -->
+    <h2 id="auth-title">Login</h2>
+
+    <!-- A <form> groups our inputs and lets us listen for a single "submit"
+         event (triggered by pressing Enter or clicking the submit button),
+         rather than tracking each input separately. -->
+    <form id="auth-form">
+      <!-- "for" on the label and "id" on the input link them together, so
+           clicking the label text also focuses the input (accessibility win). -->
+      <div class="form-field">
+        <label for="username">Username</label>
+        <!-- type="text" gives a normal visible text box. "required" tells the
+             browser to block submission if this field is left empty. -->
+        <input
+          type="text"
+          id="username"
+          name="username"
+          autocomplete="username"
+          placeholder="Enter your username"
+          required
+        />
+      </div>
+
+      <div class="form-field">
+        <label for="password">Password</label>
+        <!-- type="password" makes the browser mask typed characters as dots,
+             since passwords shouldn't be visible on-screen as you type them. -->
+        <input
+          type="password"
+          id="password"
+          name="password"
+          autocomplete="current-password"
+          placeholder="Enter your password"
+          required
+        />
+        <!-- Lets the user peek at what they typed, since password fields
+             hide characters by default and typos are easy to make blind. -->
+        <button type="button" id="toggle-password" aria-label="Show password" title="Show password">
+          👁
+        </button>
+      </div>
+
+      <!-- type="submit" makes this button trigger the form's "submit" event
+           when clicked, which app.js listens for. -->
+      <button type="submit" id="auth-submit-btn">Login</button>
+    </form>
+
+    <!-- This button lets the user toggle between "Login" mode and "Sign Up"
+         mode without navigating to a whole new page. -->
+    <button type="button" class="switch-link" id="switch-mode-btn">
+      Need an account? Sign Up
+    </button>
+
+    <!-- An empty container where app.js will insert error messages (like
+         "Invalid username or password") if something goes wrong. -->
+    <div id="auth-error" class="error-message"></div>
+  </div>
+
+  <!-- ============ TODO APP SECTION ============ -->
+  <!-- This section is hidden by default (see the "hidden" class below) and
+       is only shown by app.js after a successful login, since a visitor
+       shouldn't see anyone's todos before proving who they are. -->
+  <div id="todo-section" class="card hidden">
+    <div class="todo-header">
+      <!-- app.js fills this span with the logged-in user's username. -->
+      <span>Welcome, <strong id="current-username"></strong>!</span>
+      <button type="button" id="logout-btn">Logout</button>
+    </div>
+
+    <!-- The weather greeting banner. It starts hidden ("hidden" class) and
+         app.js fills it in + reveals it once "/api/weather" responds, right
+         above the to-do list as requested. -->
+    <div id="weather-greeting" class="hidden">
+      <img id="weather-icon" src="" alt="" />
+      <div id="weather-text">
+        <strong id="weather-headline"></strong>
+        <span id="weather-detail"></span>
+      </div>
+    </div>
+
+    <!-- ============ WEATHER SEARCH ============ -->
+    <!-- Lets the user check the weather for ANY city they type, separate from
+         the default-city greeting banner above. app.js fills #weather-result
+         in with temperature, condition, humidity, and wind speed. -->
+    <form id="weather-search-form" class="weather-search-row">
+      <input
+        type="text"
+        id="weather-city-input"
+        placeholder="Enter a city name, e.g. London"
+        required
+      />
+      <button type="submit">Check</button>
+    </form>
+    <div id="weather-search-error" class="weather-search-error"></div>
+    <div id="weather-result" class="hidden">
+      <span id="weather-result-city"></span>
+      <div id="weather-result-grid">
+        <span>🌡️ Temperature: <strong id="weather-result-temp"></strong></span>
+        <span>☁️ Condition: <strong id="weather-result-condition"></strong></span>
+        <span>💧 Humidity: <strong id="weather-result-humidity"></strong></span>
+        <span>💨 Wind: <strong id="weather-result-wind"></strong></span>
+      </div>
+    </div>
+
+    <!-- This form lets the user type a new todo and add it to their list. -->
+    <form id="add-todo-form" class="add-todo-row">
+      <input
+        type="text"
+        id="new-todo-input"
+        placeholder="What do you need to do?"
+        required
+      />
+      <button type="submit">Add</button>
+    </form>
+
+    <!-- app.js will dynamically fill this <ul> with one <li> per todo item,
+         since the list of todos changes constantly and can't be hardcoded here. -->
+    <ul id="todo-list"></ul>
+  </div>
+
+  <!-- This <script> tag loads our app.js file and runs it. We place it at the
+       very end of <body> (rather than in <head>) so the browser finishes
+       building the whole page structure above FIRST, guaranteeing that every
+       element app.js tries to grab (like #todo-list) already exists. -->
+  <script src="app.js"></script>
+  <!-- Small standalone script for the password show/hide eye icon, kept
+       separate from app.js since it's pure UI and has nothing to do with
+       logging in, signing up, or todos. -->
+  <script>
+    const togglePasswordBtn = document.getElementById("toggle-password");
+    const passwordInput = document.getElementById("password");
+
+    togglePasswordBtn.addEventListener("click", () => {
+      const isHidden = passwordInput.type === "password";
+      passwordInput.type = isHidden ? "text" : "password";
+      togglePasswordBtn.textContent = isHidden ? "🙈" : "👁";
+      togglePasswordBtn.setAttribute(
+        "aria-label",
+        isHidden ? "Hide password" : "Show password"
+      );
+    });
+  </script>
+</body>
+</html>
