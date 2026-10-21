@@ -15,10 +15,10 @@ const mysql = require("mysql2/promise");
 // that get reused across requests, instead of opening/closing a brand new
 // connection every single time we run a query (which would be slow).
 const pool = mysql.createPool({
-  host: "localhost", // MySQL is running on this same computer.
-  user: "root", // The MySQL user we're logging in as.
-  password: "", // No password set for this local "root" user.
-  database: "todo_db", // The specific database (created in DBeaver) we're using.
+    host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME || "todo_db",
 });
 
 // ---------- CREATE TABLES IF THEY DON'T EXIST YET ----------

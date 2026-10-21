@@ -41,7 +41,7 @@ const app = express();
 
 // We define which "port" (a numbered door on your computer) the server will
 // listen on. Browsers will visit http://localhost:3000 to reach this server.
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // ---------- MIDDLEWARE SETUP ----------
 // "Middleware" are functions that run on EVERY incoming request, before it
@@ -55,7 +55,7 @@ app.use(express.json());
 // This middleware serves our static frontend files (index.html, app.js)
 // directly to the browser whenever it requests them, straight out of the
 // current folder ("__dirname" = the folder this server.js file lives in).
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, "public")));
 
 // This middleware sets up login sessions.
 app.use(
@@ -64,7 +64,7 @@ app.use(
     // cookie so it can't be tampered with. In a REAL production app, this
     // should be a long random string stored in an environment variable, not
     // typed directly in the code like this. We keep it simple here for learning.
-    secret: "beginner-todo-app-secret-key",
+        secret: process.env.SESSION_SECRET,
     // "resave: false" stops the session from being re-saved on every single
     // request if nothing actually changed, which is more efficient.
     resave: false,
@@ -368,7 +368,7 @@ app.delete("/todos/:id", requireLogin, async (req, res) => {
 // This route makes sure that visiting the site's root URL ("/") sends back
 // our index.html file, so users see the app immediately.
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // Finally, this actually starts the server. We first run our database's
