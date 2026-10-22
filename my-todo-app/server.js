@@ -36,6 +36,21 @@ const path = require("path");
 // mock database (finding users, creating todos, etc.) inside this file.
 const db = require("./database");
 
+// Our own S3 helper functions (upload, list, delete), written in s3.js --
+// the same idea as database.js, but for file storage instead of MySQL.
+const s3Storage = require("./s3");
+
+// "multer" handles file uploads. express.json() only understands JSON, but
+// files arrive as "multipart/form-data", which multer knows how to read.
+// "memoryStorage" keeps the uploaded file in memory just long enough for us
+// to pass it on to S3 -- nothing is saved on the EC2 server's disk.
+// "limits" rejects files over 5 MB, protecting our server's memory and our bill.
+const multer = require("multer");
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
 // "app" is our actual Express application/server. Calling express() creates it.
 const app = express();
 
@@ -360,9 +375,99 @@ app.delete("/todos/:id", requireLogin, async (req, res) => {
     return res.status(404).json({ error: "Todo not found." });
   }
 
+  // The todo is gone from MySQL, so also remove any files attached to it in
+  // S3. If this cleanup fails, we only log it: the todo really was deleted,
+  // so the user should still see success rather than a confusing error.
+  if (process.env.S3_BUCKET) {
+    try {
+      await s3Storage.deleteTodoFiles(req.session.userId, todoId);
+    } catch (err) {
+      console.error("Could not delete this todo's files from S3:", err.message);
+    }
+  }
+
   // "204" means "No Content" - the request succeeded but there's nothing
   // meaningful to send back (the item is just... gone now).
   res.status(204).send();
+});
+
+// ---------- TODO FILE ROUTES (Amazon S3) ----------
+// These routes let a user attach files to their todos. The files themselves
+// live in our private S3 bucket, never on the EC2 server's disk.
+
+// A small security helper: checks that a todo really belongs to this user
+// before we let them upload to it or see its files. Without this check, a
+// logged-in user could guess another user's todo IDs and reach their files.
+async function userOwnsTodo(userId, todoId) {
+  const userTodos = await db.getTodosByUserId(userId);
+  return userTodos.some((todo) => Number(todo.id) === todoId);
+}
+
+// Upload one file to a todo. The order of the middleware matters:
+// requireLogin runs first, so visitors who aren't logged in are turned away
+// BEFORE multer reads any file data. upload.single("file") then reads the one
+// file sent under the form field name "file" and puts it on "req.file".
+app.post("/todos/:id/files", requireLogin, upload.single("file"), async (req, res) => {
+  // Same idea as the weather route: fail clearly if .env isn't set up.
+  if (!process.env.S3_BUCKET) {
+    return res.status(500).json({ error: "File storage is not configured." });
+  }
+
+  const todoId = Number(req.params.id);
+
+  if (!req.file) {
+    return res.status(400).json({ error: "Please choose a file to upload." });
+  }
+
+  try {
+    if (!(await userOwnsTodo(req.session.userId, todoId))) {
+      return res.status(404).json({ error: "Todo not found." });
+    }
+
+    const key = await s3Storage.uploadTodoFile(req.session.userId, todoId, req.file);
+    res.status(201).json({ message: "File uploaded!", key });
+  } catch (err) {
+    // The full error goes to the server log for us to debug, but the browser
+    // only gets a generic message (we never expose AWS details to users).
+    console.error("S3 upload failed:", err.message);
+    res.status(502).json({ error: "Could not upload the file right now." });
+  }
+});
+
+// List the files attached to a todo, each with a temporary (1 hour) link.
+app.get("/todos/:id/files", requireLogin, async (req, res) => {
+  if (!process.env.S3_BUCKET) {
+    return res.status(500).json({ error: "File storage is not configured." });
+  }
+
+  const todoId = Number(req.params.id);
+
+  try {
+    if (!(await userOwnsTodo(req.session.userId, todoId))) {
+      return res.status(404).json({ error: "Todo not found." });
+    }
+
+    const files = await s3Storage.listTodoFiles(req.session.userId, todoId);
+    res.json({ files });
+  } catch (err) {
+    console.error("S3 list failed:", err.message);
+    res.status(502).json({ error: "Could not load files right now." });
+  }
+});
+
+// An "error-handling middleware" (Express recognises it by its FOUR
+// arguments). If multer rejects an upload -- most often because the file is
+// over our 5 MB limit -- Express jumps straight here, and we send a friendly
+// message instead of an ugly default error page.
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    const message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? "That file is too large. The limit is 5 MB."
+        : "File upload failed.";
+    return res.status(400).json({ error: message });
+  }
+  next(err);
 });
 
 // This route makes sure that visiting the site's root URL ("/") sends back
