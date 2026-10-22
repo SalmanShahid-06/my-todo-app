@@ -351,6 +351,68 @@
       margin-bottom: 10px;
       min-height: 16px;
     }
+
+    /* ---------- TODO FILE ATTACHMENTS (Amazon S3) ---------- */
+
+    /* Lets a todo row "wrap", so its list of attached files can drop onto
+       its own line underneath the checkbox, text, and buttons. */
+    .todo-item {
+      flex-wrap: wrap;
+    }
+
+    /* The small paperclip button that opens the file picker. It uses the
+       same lighter blue as the page's gradient so it reads as a friendly,
+       secondary action next to the red delete button. */
+    .attach-btn {
+      width: auto;
+      background-color: #6a8dff;
+      padding: 4px 10px;
+      margin-right: 6px;
+    }
+
+    .attach-btn:hover {
+      background-color: #5577ee;
+    }
+
+    /* The area under each todo that lists its files. "flex-basis: 100%"
+       makes it take the full row width, which pushes it onto a new line.
+       The left padding lines it up with the todo's text, not the checkbox. */
+    .todo-files {
+      flex-basis: 100%;
+      padding-left: 24px;
+      font-size: 13px;
+    }
+
+    /* Removes the default bullets and spacing from each todo's file list. */
+    .file-list {
+      list-style: none;
+      padding: 0;
+      margin: 6px 0 0;
+    }
+
+    .file-list li {
+      padding: 2px 0;
+    }
+
+    /* "word-break" stops very long file names from stretching the card. */
+    .file-list a {
+      color: #4a90e2;
+      word-break: break-all;
+    }
+
+    .file-size {
+      color: #999;
+    }
+
+    /* Short messages like "Uploading..." and "File uploaded!". */
+    .file-status {
+      margin-top: 4px;
+      color: #4a7d3a;
+    }
+
+    .file-status.error {
+      color: #d9534f;
+    }
   </style>
 </head>
 <body>
@@ -479,7 +541,9 @@
     </form>
 
     <!-- app.js will dynamically fill this <ul> with one <li> per todo item,
-         since the list of todos changes constantly and can't be hardcoded here. -->
+         since the list of todos changes constantly and can't be hardcoded here.
+         Each todo also gets a 📎 button for attaching files, which are stored
+         in our Amazon S3 bucket (see the file attachment functions in app.js). -->
     <ul id="todo-list"></ul>
   </div>
 
