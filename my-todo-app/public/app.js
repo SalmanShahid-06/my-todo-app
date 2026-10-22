@@ -47,6 +47,11 @@ const weatherResultWind = document.getElementById("weather-result-wind");
 // robotic. We pick one at random each time weather loads.
 const GREETINGS = ["Good to see you", "Welcome back", "Hope you're having a great day", "Hello there"];
 
+// The biggest file a user may attach (5 MB). This matches the limit set in
+// server.js. We check it here too so users get instant feedback instead of
+// waiting for a large file to upload only to be rejected by the server.
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
 // ---------- HELPER FUNCTIONS ----------
 
 // This function shows the todo app and hides the login form, used right
@@ -101,6 +106,14 @@ function toggleAuthMode() {
   clearAuthError();
 }
 
+// Turns a raw number of bytes (like 248311) into something readable for
+// humans (like "242.5 KB"), for showing next to each attached file's name.
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 // This function takes an array of todo objects (from the server) and
 // rebuilds the entire <ul id="todo-list"> to display them.
 function renderTodos(todos) {
@@ -137,19 +150,57 @@ function renderTodos(todos) {
     // called avoiding "XSS" (cross-site scripting).
     span.textContent = todo.task;
 
+    // ---- File attachments (stored in Amazon S3) ----
+    // This box sits underneath the row and shows the todo's attached files,
+    // plus short status messages like "Uploading...".
+    const filesBox = document.createElement("div");
+    filesBox.className = "todo-files";
+
+    // A file picker for this todo. The browser's built-in file input is hard
+    // to style nicely, so we keep it hidden and open it from our own
+    // paperclip button instead (see attachBtn below).
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.className = "hidden";
+    // "change" fires once the user has picked a file in the dialog.
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files.length > 0) {
+        uploadFile(todo.id, fileInput.files[0], filesBox);
+      }
+      // Reset the picker so choosing the very same file again still works.
+      fileInput.value = "";
+    });
+
+    // The paperclip button that opens the hidden file picker.
+    const attachBtn = document.createElement("button");
+    attachBtn.type = "button";
+    attachBtn.textContent = "📎";
+    attachBtn.className = "attach-btn";
+    attachBtn.title = "Attach a file";
+    // Screen readers can't describe an emoji well, so we give it a clear label.
+    attachBtn.setAttribute("aria-label", "Attach a file");
+    attachBtn.addEventListener("click", () => fileInput.click());
+
     // Create the delete ("X") button for this todo.
     const deleteBtn = document.createElement("button");
     deleteBtn.textContent = "X";
     deleteBtn.className = "delete-btn";
     deleteBtn.addEventListener("click", () => deleteTodo(todo.id));
 
-    // Attach (append) all three pieces into the <li> row, in visual order.
+    // Attach (append) all the pieces into the <li> row, in visual order.
+    // The file list goes last so it appears on its own line underneath.
     li.appendChild(checkbox);
     li.appendChild(span);
+    li.appendChild(attachBtn);
     li.appendChild(deleteBtn);
+    li.appendChild(fileInput);
+    li.appendChild(filesBox);
 
     // Finally, attach the fully-built <li> into the visible <ul> on the page.
     todoList.appendChild(li);
+
+    // Ask the server which files this todo already has, and show them.
+    loadFiles(todo.id, filesBox);
   });
 }
 
@@ -284,10 +335,140 @@ async function toggleTodo(todoId) {
 }
 
 // Tells the server to permanently delete one todo, then refreshes the list.
+// (server.js also deletes that todo's attached files from S3.)
 async function deleteTodo(todoId) {
   // DELETE is the HTTP method conventionally used for removing data.
   await fetch(`/todos/${todoId}`, { method: "DELETE" });
   loadTodos();
+}
+
+// ---------- FILE ATTACHMENT FUNCTIONS (Amazon S3) ----------
+// The browser never talks to S3 directly. It sends files to OUR server
+// (server.js), which uploads them to the private S3 bucket using the EC2
+// instance's IAM role. To view a file, the server hands back a temporary
+// "presigned" link that works for 1 hour.
+
+// Shows a short message (like "Uploading...") under one todo. "isError"
+// switches the text to red so problems stand out.
+function showFileStatus(filesBox, message, isError) {
+  // Reuse the todo's existing status line if it has one, or create it.
+  let status = filesBox.querySelector(".file-status");
+  if (!status) {
+    status = document.createElement("div");
+    status.className = "file-status";
+    filesBox.appendChild(status);
+  }
+  status.textContent = message;
+  // classList.toggle(name, condition) adds the class when the condition is
+  // true and removes it when false.
+  status.classList.toggle("error", Boolean(isError));
+}
+
+// Removes a todo's status message, used a few seconds after a success.
+function clearFileStatus(filesBox) {
+  const status = filesBox.querySelector(".file-status");
+  if (status) {
+    status.remove();
+  }
+}
+
+// Asks the server for one todo's files and shows them as clickable links.
+async function loadFiles(todoId, filesBox) {
+  try {
+    const response = await fetch(`/todos/${todoId}/files`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      // Like the weather banner, a missing file list shouldn't break the
+      // todo app, so we just log it for debugging instead of showing an
+      // error under every single todo.
+      console.warn(`Could not load files for todo ${todoId}:`, data.error);
+      return;
+    }
+
+    // Remove the old list before drawing the fresh one, so files never
+    // appear twice after an upload.
+    const oldList = filesBox.querySelector(".file-list");
+    if (oldList) {
+      oldList.remove();
+    }
+
+    // No files yet -- leave the area empty so it takes up no space.
+    if (data.files.length === 0) {
+      return;
+    }
+
+    const list = document.createElement("ul");
+    list.className = "file-list";
+
+    data.files.forEach((file) => {
+      const item = document.createElement("li");
+
+      const link = document.createElement("a");
+      // file.url is the temporary presigned link created by server.js.
+      link.href = file.url;
+      // target="_blank" opens the file in a new tab, so the todo list stays
+      // open. rel="noopener" is a security habit for links that open new tabs.
+      link.target = "_blank";
+      link.rel = "noopener";
+      // textContent again, since file names come from users and could
+      // contain HTML we never want the browser to run.
+      link.textContent = `📄 ${file.name}`;
+
+      const size = document.createElement("span");
+      size.className = "file-size";
+      size.textContent = ` (${formatFileSize(file.size)})`;
+
+      item.appendChild(link);
+      item.appendChild(size);
+      list.appendChild(item);
+    });
+
+    // .prepend() puts the list FIRST in the box, above any status message.
+    filesBox.prepend(list);
+  } catch (err) {
+    console.warn(`Could not load files for todo ${todoId}:`, err);
+  }
+}
+
+// Sends one file to the server to be stored in S3 for the given todo.
+async function uploadFile(todoId, file, filesBox) {
+  if (file.size > MAX_FILE_SIZE) {
+    showFileStatus(filesBox, "That file is too large. The limit is 5 MB.", true);
+    return;
+  }
+
+  showFileStatus(filesBox, `Uploading ${file.name}...`, false);
+
+  // Files can't be sent as JSON. "FormData" packages the file the same way a
+  // classic HTML upload form would ("multipart/form-data"), which is what
+  // multer in server.js expects. The name "file" must match
+  // upload.single("file") on the server.
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    // Note: NO "Content-Type" header here. The browser sets it automatically
+    // for FormData, including a special "boundary" value that separates the
+    // parts. Setting it by hand would break the upload.
+    const response = await fetch(`/todos/${todoId}/files`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      showFileStatus(filesBox, data.error || "Could not upload the file.", true);
+      return;
+    }
+
+    showFileStatus(filesBox, "File uploaded!", false);
+    // Hide the success message after 3 seconds so it doesn't linger.
+    setTimeout(() => clearFileStatus(filesBox), 3000);
+    loadFiles(todoId, filesBox);
+  } catch (err) {
+    showFileStatus(filesBox, "Could not upload the file right now.", true);
+  }
 }
 
 // ---------- EVENT LISTENERS ----------
