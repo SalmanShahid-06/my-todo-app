@@ -1,3 +1,36 @@
+name: Node.js CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]   # Runs CI + deploy every time you push to main
+  pull_request:
+    branches: [ main ]   # Runs CI only, when someone opens a pull request to main
+
+jobs:
+  # ================= STAGE 1: CONTINUOUS INTEGRATION =================
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: my-todo-app
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Project Dependencies
+        run: npm ci
+
+      - name: Check Syntax
+        run: |
+          node --check server.js
+          node --check public/app.js
+
   # ================= STAGE 2: CONTINUOUS DEPLOYMENT =================
   deploy:
     needs: ci
