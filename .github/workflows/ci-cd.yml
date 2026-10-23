@@ -1,0 +1,59 @@
+name: Node.js CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]   # Runs CI + deploy every time you push to main
+  pull_request:
+    branches: [ main ]   # Runs CI only, when someone opens a pull request to main
+
+jobs:
+  # ================= STAGE 1: CONTINUOUS INTEGRATION =================
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: my-todo-app   # Run every command inside the app folder
+
+    steps:
+      # Step 1: Clone the code from GitHub onto the runner server
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Install the same Node.js version that runs on EC2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Step 3: Clean install of exact versions from package-lock.json
+      - name: Install Project Dependencies
+        run: npm ci
+
+      # Step 4: Check the code for syntax errors
+      - name: Check Syntax
+        run: |
+          node --check server.js
+          node --check public/app.js
+
+  # ================= STAGE 2: CONTINUOUS DEPLOYMENT =================
+  deploy:
+    needs: ci                              # Runs ONLY if the ci job passed
+    if: github.event_name == 'push'        # Deploy on push to main, never on pull requests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 5: Connect to EC2 and update the running app
+      - name: Deploy to EC2 over SSH
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+            export NVM_DIR="$HOME/.nvm"
+            source "$NVM_DIR/nvm.sh"
+            cd ~/todo-repo
+            git pull origin main
+            cd my-todo-app
+            npm ci --omit=dev
+            pm2 restart todo-app
+          EOF
