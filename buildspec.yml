@@ -1,0 +1,21 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+  pre_build:
+    commands:
+      - cd $CODEBUILD_SRC_DIR/my-todo-app
+      - npm ci
+  build:
+    commands:
+      - cd $CODEBUILD_SRC_DIR/my-todo-app
+      - npm run build --if-present
+
+artifacts:
+  base-directory: my-todo-app
+  files:
+    - '**/*'
+  exclude-paths:
+    - 'node_modules/**/*'
